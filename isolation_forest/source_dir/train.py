@@ -2,13 +2,13 @@ from __future__ import print_function
 
 import argparse
 import os
+from io import StringIO
 
 import joblib
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import IsolationForest
-
-
+from custom_tranforms import get_pipeline
 
 def shingle(data, shingle_size):
     num_data = len(data)
@@ -33,6 +33,10 @@ if __name__ == "__main__":
     parser.add_argument("--train", type=str, default=os.environ["SM_CHANNEL_TRAIN"])
     
     args = parser.parse_args()
+    
+    files = [f for f in os.listdir('.') if os.path.isfile(f)]
+    for f in files:
+        print(f)
     
     # Take the set of files and read them all into a single pandas dataframe
     input_files = [os.path.join(args.train, file) for file in os.listdir(args.train)]
@@ -81,7 +85,23 @@ if __name__ == "__main__":
     # Print the coefficients of the trained classifier, and save the coefficients
     joblib.dump(clf, os.path.join(args.model_dir, "model.joblib"))
     
+    
+def input_fn(input_data, content_type):
+    """Parse input data payload
+    We currently only take csv input. Since we need to process both labelled
+    and unlabelled data we first determine whether the label column is present
+    by looking at how many columns were provided.
+    """
+    if content_type == "text/csv":
+        # Read the raw input data as CSV.
+        df = pd.read_csv(StringIO(input_data), header=None)
+        
+        pipe = get_pipeline(column='rnd_column')
 
+        return pipe.fit_transform(df)
+    else:
+        raise ValueError("{} not supported by script!".format(content_type))    
+    
 def model_fn(model_dir):
     """Deserialized and return fitted model
     Note that this should have the same name as the serialized model in the main method
